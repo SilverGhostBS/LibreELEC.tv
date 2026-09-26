@@ -1,0 +1,28 @@
+Backport of our amd-staging patch "drm/amd/display: Don't replace a sink mode
+that shares the native totals" (not yet sent) to 7.2.
+
+decide_crtc_timing_for_drm_display_mode() gave any mode with the native mode's
+clock/htotal/vtotal the native timing, meant for amdgpu's inserted common modes.
+VIC 102 (4096x2160@60) shares them with VIC 97 (3840x2160@60), so DCI 4K60 went
+out as a scaled 3840x2160 timing labelled VIC 102. Also compare the sync
+positions, which inserted modes copy from the native mode and real modes do not.
+
+--- a/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c	2026-09-24 23:36:51
++++ b/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c	2026-09-24 23:36:57
+@@ -7206,10 +7206,15 @@
+ 					const struct drm_display_mode *native_mode,
+ 					bool scale_enabled)
+ {
++	/* Inserted modes copy the native sync; a sink mode with equal totals may not */
+ 	if (scale_enabled || (
+ 	    native_mode->clock == drm_mode->clock &&
+ 	    native_mode->htotal == drm_mode->htotal &&
+-	    native_mode->vtotal == drm_mode->vtotal)) {
++	    native_mode->vtotal == drm_mode->vtotal &&
++	    native_mode->hsync_start == drm_mode->hsync_start &&
++	    native_mode->hsync_end == drm_mode->hsync_end &&
++	    native_mode->vsync_start == drm_mode->vsync_start &&
++	    native_mode->vsync_end == drm_mode->vsync_end)) {
+ 		if (native_mode->crtc_clock)
+ 			copy_crtc_timing_for_drm_display_mode(native_mode, drm_mode);
+ 	} else {

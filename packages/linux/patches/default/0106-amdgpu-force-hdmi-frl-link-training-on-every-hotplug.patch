@@ -1,0 +1,36 @@
+Backport of upstream c953b39f9487 ("drm/amd/display: Reintroduce \"Force
+validation link training on all ASICs\"", Ivan Lipski, in 7.3-rc1) to 7.2.
+
+skip_frl_pretraining makes a re-detect on an active link non-destructive, so
+FRL is never re-verified: after any sink-side HPD the sink stays TMDS, 8K60
+fails validation and disappears from the connector's mode list. Upstream drops
+the flag; 7.2 has no replacement field, so the branch goes away entirely.
+
+--- a/drivers/gpu/drm/amd/display/dc/link/link_detection.c	2026-09-17 15:12:24
++++ b/drivers/gpu/drm/amd/display/dc/link/link_detection.c	2026-09-17 15:12:24
+@@ -926,24 +926,9 @@
+ 	} else if (dc_is_hdmi_signal(link->local_sink->sink_signal) && link->link_enc &&
+ 				link->link_enc->features.flags.bits.IS_HDMI_FRL_CAPABLE &&
+ 				link->local_sink->edid_caps.max_frl_rate != 0) {
+-		int i = 0;
+-		struct pipe_ctx *pipes =
+-				link->dc->current_state->res_ctx.pipe_ctx;
+-
+ 		destrictive = true;
+-		if (is_hdmi_frl_in_use(link)) {
++		if (is_hdmi_frl_in_use(link))
+ 			destrictive = false;
+-		} else if (link->dc->config.skip_frl_pretraining) {
+-			for (i = 0; i < MAX_PIPES; i++) {
+-				if (pipes[i].stream != NULL &&
+-					pipes[i].stream->link == link) {
+-					/*If link is already active, skip PHY programming*/
+-					if (link->link_status.link_active) {
+-						destrictive = false;
+-					}
+-				}
+-			}
+-		}
+ 	}
+ 
+ 	return destrictive;
