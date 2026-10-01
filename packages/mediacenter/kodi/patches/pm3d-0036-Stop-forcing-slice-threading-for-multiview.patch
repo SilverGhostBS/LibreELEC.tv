@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dom Cobley <popcornmix@gmail.com>
+Date: Thu, 17 Sep 2026 16:25:56 +0100
+Subject: [PATCH 34/46] [VideoPlayer] Stop forcing slice threading for
+ multiview
+
+Frame threading used to be unusable for multiview: the dependent view of an
+access unit predicts from the base view of that same access unit, so ffmpeg
+could not overlap the two and the threads only added synchronisation. Slice
+threading alone was the faster of the two by a wide margin, and the decoder
+asked for it explicitly.
+
+ffmpeg now supports frame threading for multiview and deblocks postponed
+slices in parallel, which reverses the comparison. Measured on a four core
+Pi 4 against a six slice H.264 MVC stream, 1000 frames: 16.1s with slice
+threading, 13.9s with frame threading, where the same clip on the previous
+ffmpeg took 19.3s and 33.6s. Core use over the same runs rose from 2.3 to
+3.3 of 4.
+
+Drop the override and let the decoder choose, which gives it both thread
+types. The thread count goes back to the core count as well: with frame
+threading available, four and six threads are within noise of each other,
+so the slice count no longer needs matching.
+
+(cherry picked from commit fa09615103244101bd3598e936ed754c456ac58f)
+---
+ .../VideoPlayer/DVDCodecs/Video/DVDVideoCodecDRMPRIME.cpp | 8 --------
+ 1 file changed, 8 deletions(-)
+
+diff --git a/xbmc/cores/VideoPlayer/DVDCodecs/Video/DVDVideoCodecDRMPRIME.cpp b/xbmc/cores/VideoPlayer/DVDCodecs/Video/DVDVideoCodecDRMPRIME.cpp
+index a7f71a0f81..b3f19eca07 100644
+--- a/xbmc/cores/VideoPlayer/DVDCodecs/Video/DVDVideoCodecDRMPRIME.cpp
++++ b/xbmc/cores/VideoPlayer/DVDCodecs/Video/DVDVideoCodecDRMPRIME.cpp
+@@ -434,14 +434,6 @@ bool CDVDVideoCodecDRMPRIME::Open(CDVDStreamInfo& hints, CDVDCodecOptions& optio
+   m_pCodecContext->time_base.den = DVD_TIME_BASE;
+   m_pCodecContext->thread_count = CServiceBroker::GetCPUInfo()->GetCPUCount();
+ 
+-  // Frame threading overlaps consecutive frames, which multiview coding does not
+-  // allow: the dependent view of an access unit predicts from the base view of
+-  // that same access unit, so the two cannot be decoded in parallel and the
+-  // threads only add synchronisation. Measured on an H.264 MVC stream it is
+-  // about a quarter slower than decoding the views with slice threading alone.
+-  if (m_multiview)
+-    m_pCodecContext->thread_type = FF_THREAD_SLICE;
+-
+   if (hints.extradata)
+   {
+     m_pCodecContext->extradata =
